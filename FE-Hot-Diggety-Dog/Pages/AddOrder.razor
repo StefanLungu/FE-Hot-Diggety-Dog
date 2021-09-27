@@ -1,0 +1,293 @@
+@page "/add-order"
+@inject IAccountService AccountService
+@inject NavigationManager NavigationManager
+@inject IHttpService Http
+@inject AppState AppState
+
+<button action="action"
+        onclick="window.history.go(-1); return false;"
+        type="submit" class="oi oi-arrow-thick-left"
+        style="background-color:var(--background); color: var(--font-color) ;width:60px; height: 30px; border: none; margin-bottom: 20px">
+</button>
+
+<div class="card">
+    <h4 class="card-header" style="background-color: var(--highlight)">Add Order</h4>
+    <div class="card-body" style="background-color: var(--highlight)">
+        <EditForm Model="@addOrderRequest">
+            <DataAnnotationsValidator />
+            <div class="form-group">
+                <label>Customer</label>
+                <select class="form-control" name="user" @onchange="@changedUser">
+                    <option value="">Select a customer</option>
+                    @foreach (var user in users)
+                    {
+                        <option value=@user.Id.ToString()>@user.Username</option>
+                    }
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Date</label>
+                <InputDate @bind-Value="addOrderRequest.Timestamp" type="datetime-local" class="form-control" />
+                <ValidationMessage For="@(() => addOrderRequest.Timestamp)" />
+            </div>
+            @if (message != null)
+            {
+                @message
+                <br />
+            }
+            else
+            {
+                @if (products == null)
+                {
+                    <p><em>Loading...</em></p>
+                }
+                else
+                {
+                    <div class="form-group">
+                        <label>Add products to order</label>
+                        <select class="form-control" name="order" @onchange=@addItemToOrder>
+                            <option value="">Select a product</option>
+                            @foreach (var product in products)
+                            {
+                                <option value=@product.Product.Id>@product.Product.Name</option>
+                            }
+                        </select>
+                    </div>
+                    @if (addOrderRequest.Products.Count != 0)
+                    {
+                        <table class="table">
+                            <th>Product ID</th>
+                            <th>Quantity</th>
+                            <th>Available</th>
+                            @foreach (var item in addOrderRequest.Products)
+                            {
+                                <tr>
+                                    <td>@products.ElementAt(products.FindIndex(prod => @item.ProductId == prod.Product.Id)).Product.Name</td>
+                                    <td>
+                                        <button style="border:none; background-color:white;" @onclick=@(() => removeItem(@item.ProductId))><span class="oi oi-minus" style="color:red;"></span></button>
+                                        @item.Quantity
+                                        <button style="border:none; background-color:white;" @onclick=@(() => addItem(@item.ProductId))><span class="oi oi-plus" style="color:green;"></span></button>
+                                    </td>
+                                    <td>@products.ElementAt(products.FindIndex(prod => @item.ProductId == prod.Product.Id)).Quantity</td>
+                                </tr>
+                            }
+                        </table>
+                    }
+                    <div>
+                        <p> <b>Total:</b> @total </p>
+                        @if (clientDiscountableStatus == true && discount != -1)
+                        {
+                            <p> <b>Discount:</b> -@discount</p>
+                            <p> <b>Final Price:</b> @(@total-@discount)</p>
+                        }
+                    </div>
+                }
+            }
+
+            @if (message != null)
+            {
+                @message <br />
+            }
+            <button type="submit" disabled="@loading" class="btn btn-primary" @onclick="OnValidSubmit">
+                @if (loading)
+                {
+                    <span class="spinner-border spinner-border-sm mr-1"></span>
+                }
+                Add Order
+            </button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private List<HotDogStandProduct> products = new List<HotDogStandProduct>();
+    private List<User> users = new List<User>();
+    private AddOrderRequest addOrderRequest = new AddOrderRequest();
+    private HotDogStand operatorStand = new HotDogStand();
+    private string message { get; set; }
+    private bool loading { get; set; }
+    private float total { get; set; }
+    private bool clientDiscountableStatus { get; set; } = false;
+    private AddProductToOrderRequest discountedProduct;
+    private float discount { get; set; } = -1;
+
+    private void changedUser(ChangeEventArgs e)
+    {
+        if ((string)e.Value != "")
+        {
+            addOrderRequest.UserId = (string) e.Value;
+            getUserDiscountableStatus();
+            discount = -1;
+        }
+    }
+
+    private async void getUserDiscountableStatus()
+    {
+        if (addOrderRequest.UserId != null)
+        {
+            try
+            {
+                clientDiscountableStatus = await Http.Get<bool>($"{ApiConstants.OrdersDiscountEndpoint}/{addOrderRequest.UserId}");
+            }
+            catch (Exception e)
+            {
+                message = e.Message;
+            }
+        }
+    }
+
+    private void getDiscountedProduct()
+    {
+        if (addOrderRequest.Products == null || addOrderRequest.Products.Count == 0)
+        {
+            discountedProduct = null;
+            return;
+        }
+
+        discountedProduct = addOrderRequest.Products.ElementAt(0);
+        foreach (AddProductToOrderRequest product in addOrderRequest.Products)
+        {
+            if (products.First(p => p.Product.Id == product.ProductId).Product.Price < products.First(p => p.Product.Id == discountedProduct.ProductId).Product.Price)
+            {
+                discountedProduct = product;
+            }
+        }
+        discount = products.First(p => p.Product.Id == discountedProduct.ProductId).Product.Price;
+    }
+
+    private void addItem(Guid itemId)
+    {
+        int index = addOrderRequest.Products.FindIndex(item => item.ProductId == itemId);
+        HotDogStandProduct product = products.FirstOrDefault(p => p.Product.Id == itemId);
+
+        if (product != default(HotDogStandProduct) && product.Quantity > 0)
+        {
+            if (index >= 0)
+            {
+                addOrderRequest.Products.ElementAt(index).Quantity += 1;
+                product.Quantity -= 1;
+            }
+            else
+            {
+                AddProductToOrderRequest addProductToOrder = new AddProductToOrderRequest();
+                addProductToOrder.ProductId = itemId;
+                addProductToOrder.Quantity = 1;
+                product.Quantity -= 1;
+                addOrderRequest.Products.Add(addProductToOrder);
+            }
+            int indexInProductList = products.FindIndex(item => item.Product.Id == itemId);
+            AddToTotalCost(products.ElementAt(indexInProductList).Product.Price);
+        }
+    }
+
+    private void removeItem(Guid itemId)
+    {
+        int index = addOrderRequest.Products.FindIndex(item => item.ProductId == itemId);
+        HotDogStandProduct product = products.FirstOrDefault(p => p.Product.Id == itemId);
+        if (index >= 0)
+        {
+            if (addOrderRequest.Products.ElementAt(index).Quantity > 1)
+            {
+                if(product != default(HotDogStandProduct))
+                {
+                    addOrderRequest.Products.ElementAt(index).Quantity -= 1;
+                    product.Quantity += 1;
+                }
+            }
+            else
+            {
+                if (clientDiscountableStatus == true && addOrderRequest.Products.ElementAt(index).ProductId == discountedProduct.ProductId)
+                {
+                    discount = -1;
+                    discountedProduct = null;
+                    addOrderRequest.Products.Remove(addOrderRequest.Products.ElementAt(index));
+                    getDiscountedProduct();
+                }
+                else
+                {
+                    if (product != default(HotDogStandProduct))
+                    {
+                        addOrderRequest.Products.Remove(addOrderRequest.Products.ElementAt(index));
+                        product.Quantity += 1;
+                    }
+                }
+            }
+            int indexInProductList = products.FindIndex(item => item.Product.Id == itemId);
+            DecreaseFromTotalCost(products.ElementAt(indexInProductList).Product.Price);
+        }
+    }
+
+    private void addItemToOrder(ChangeEventArgs selectEvent)
+    {
+        string value = selectEvent.Value.ToString();
+        if (value == "")
+        {
+            return;
+        }
+        Guid selectedItem = Guid.Parse(value);
+        addItem(selectedItem);
+        if (clientDiscountableStatus == true)
+        {
+            getDiscountedProduct();
+        }
+    }
+
+    private void AddToTotalCost(float amount)
+    {
+        total += amount;
+    }
+
+    private void DecreaseFromTotalCost(float amount)
+    {
+        total -= amount;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        addOrderRequest.OperatorId = AccountService.User.Id;
+        addOrderRequest.Timestamp = DateTime.Now;
+        users = await Http.Get<List<User>>(ApiConstants.CustomersEndpoint);
+
+        if (AccountService.User.Role == "OPERATOR")
+        {
+            string getStandByOperatorEndpoint = $"{ApiConstants.StandsEndpoint}/operator/{AccountService.User.Id}";
+            operatorStand = await Http.Get<HotDogStand>(getStandByOperatorEndpoint);
+            products = operatorStand.StandProducts.ToList();
+        }
+    }
+
+    private async void OnValidSubmit()
+    {
+        loading = true;
+        try
+        {
+            if (clientDiscountableStatus == true && discountedProduct != null)
+            {
+                addOrderRequest.Products.First(p => p.ProductId == discountedProduct.ProductId).Quantity--;
+                addOrderRequest.DiscountedProductId = discountedProduct.ProductId;
+            }
+            else
+            {
+                addOrderRequest.DiscountedProductId = Guid.Empty;
+            }
+
+            List<AddProductToStandRequest> productsRequestsList = new List<AddProductToStandRequest>();
+            foreach(HotDogStandProduct product in products)
+            {
+                AddProductToStandRequest productRequest = new AddProductToStandRequest() { ProductId = product.Product.Id, Quantity = product.Quantity };
+                productsRequestsList.Add(productRequest);
+            }
+
+            UpdateStandProductsRequest updateStandProductsRequest = new UpdateStandProductsRequest() { StandId = operatorStand.Id, Products = productsRequestsList };
+            await Http.Put($"{ApiConstants.StandsEndpoint}/products", updateStandProductsRequest);
+            await Http.Post(ApiConstants.OrdersEndpoint, addOrderRequest);
+            NavigationManager.NavigateTo(PagesConstants.HomePage);
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+            loading = false;
+            StateHasChanged();
+        }
+    }
+}

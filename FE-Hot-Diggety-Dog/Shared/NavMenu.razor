@@ -1,0 +1,127 @@
+﻿@inject IAccountService AccountService
+@inject AppState AppState
+@implements IDisposable
+
+<div class="top-row pl-4 navbar navbar-dark">
+    <a class="navbar-brand" href="">Hot Diggety Dog</a>
+    <button class="navbar-toggler" @onclick="ToggleNavMenu">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+</div>
+
+<div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+    <ul class="nav flex-column">
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="oi oi-home" aria-hidden="true"></span> Home
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="stands">
+                <span class="oi oi-info" aria-hidden="true"></span> Stands Information
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="products">
+                <span class="oi oi-script" aria-hidden="true"></span> Menu
+            </NavLink>
+        </li>
+        @if (!AppState.LoggedIn)
+        {
+            <li class="nav-item px-3">
+                <NavLink class="nav-link" href="account/register">
+                    <span class="oi oi-people" aria-hidden="true"></span> Register
+                </NavLink>
+            </li>
+            <li class="nav-item px-3">
+                <NavLink class="nav-link" href="account/login">
+                    <span class="oi oi-account-login" aria-hidden="true"></span> Login
+                </NavLink>
+            </li>
+        }
+        else
+        {
+            if (AccountService.User.Role == "ADMIN")
+            {
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="order-history-admin">
+                        <span class="oi oi-book" aria-hidden="true"> </span>  Order history
+                    </NavLink>
+                </li>
+            }
+            else
+            if (AccountService.User.Role == "OPERATOR")
+            {
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="add-order">
+                        <span class="oi oi-plus" aria-hidden="true"> </span>  Add order
+                    </NavLink>
+                </li>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="order-history-operator">
+                        <span class="oi oi-book" aria-hidden="true"> </span>  Order history
+                    </NavLink>
+                </li>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="manage-resources">
+                        <span class="oi oi-box" aria-hidden="true"> </span>  Manage Stand Resources
+                    </NavLink>
+                </li>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="request-products">
+                        <span class="oi oi-cart" aria-hidden="true"> </span>  Request Products
+                    </NavLink>
+                </li>
+            }
+            else
+            if (AccountService.User.Role == "CUSTOMER")
+            {
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="order-history-customer">
+                        <span class="oi oi-book" aria-hidden="true"> </span>  Order history
+                    </NavLink>
+                </li>
+            }
+            else
+            if (AccountService.User.Role == "SUPPLIER")
+            {
+                 <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="manage-requests">
+                        <span class="oi oi-bell" aria-hidden="true"> </span>  Requests
+                    </NavLink>
+                </li>
+                <li class="nav-item px-3">
+                    <NavLink class="nav-link" href="manage-inventory">
+                        <span class="oi oi-project" aria-hidden="true"> </span>  Manage inventory
+                    </NavLink>
+                </li>
+            }
+            <li class="nav-item px-3">
+                <NavLink class="nav-link" href="account/logout">
+                    <span class="oi oi-account-logout" aria-hidden="true"></span> Logout
+                </NavLink>
+            </li>
+        }
+    </ul>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+
+    protected override void OnInitialized()
+    {
+        AppState.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        AppState.OnChange -= StateHasChanged;
+    }
+}
